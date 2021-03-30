@@ -155,3 +155,44 @@ import { createDecipheriv } from 'crypto';
 const decipher = createDecipheriv('AES-128-ECB', key7, null);
 const cleartext7 = decipher.update(cypherbytes7, null, 'utf8') + decipher.final('utf8');
 console.log(cleartext7); // Same song again!
+
+////////////////////////////////////////////////
+console.log("Challenge 8: Detect AES in ECB mode");
+// Look for repetition of 16-byte blocks? Unlikely to be any in a short string.
+// <https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Electronic_codebook_(ECB)>
+// The penguin image demonstrates the vulnerability, but it's a large array of data.
+// Let's try that anyway.
+
+// Read hex into bytes; break into blocks, count repetitions for each unique block, rank by it.
+
+const lines8 = readFileSync('8.txt', 'utf8').split("\n");
+const buffers = lines8.map(x => Buffer.from(x, 'hex'));
+let line_no = 1;
+
+let suspects = []; // [line, #duplicates]
+for (let buf of buffers){
+  //console.log("Line: "); // + l.toString('hex'));
+
+  let blocks = ct.array_to_blocks(buf, 16);
+  //console.log(blocks);
+  let strings = blocks.map(x => Buffer.from(x).toString('hex'));
+  //console.log(strings);
+  let accum = 0;
+  // Note: accum counts ALL pairs which are equal, so it is generally larger
+  // than the size of the equivalence class because it counts the transitive
+  // closure.
+  for (let i = 0; i < strings.length - 1; i++) {
+    for (let j = i + 1; j < strings.length; j++) {
+      if (strings[i] == strings[j]) {
+        console.log(`  Match: ${i},${j}: ` + strings[i] + " and " + strings[j]);
+        accum += 1;
+      }
+    }
+  }
+  if (accum > 0)
+    suspects.push([line_no, accum]);
+  //console.log(`Line ${line_no} has ${accum} duplicate blocks`);
+  line_no += 1;
+}
+console.log("Suspects:");
+console.log(suspects.map(x => `Line ${x[0]} has ${x[1]} repetitions.`));
