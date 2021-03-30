@@ -89,7 +89,7 @@ sync_solution();
 
 ////////////////////////////////////////////////
 console.log("\nChallenge 5: Implement repeating-key XOR");
-const key = "ICE" // Buffer.from("ICE", 'utf8');
+const key = "ICE";
 const phrase = "Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal";
 
 const byte_res = ct.bxor(Buffer.from(key), Buffer.from(phrase), true);
@@ -101,82 +101,46 @@ checkResAns(res5, ans5);
 
 
 ////////////////////////////////////////////////
-console.log("\nChallenge 6: Break repeating-key XOR");
+console.log("Challenge 6: Break repeating-key XOR");
 // File '6.txt' has been base64'd after being encrypted with repeating-key XOR.
 // Decrypt it.
 
-// Load the file
-let base64lines = readFileSync('6.txt', 'utf8');
-
-let base64cont = base64lines.split('\n').join('');
-//console.log(base64cont);
+// Load and decode the file
+const base64lines = readFileSync('6.txt', 'utf8');
+const base64cont = base64lines.split('\n').join('');
 const cypherbytes = Buffer.from(base64cont, 'base64');
-console.log(`(${cypherbytes.length} bytes):`);
-console.log(cypherbytes);
+console.log(`(Read and decoded into ${cypherbytes.length} bytes)`);
+//console.log(cypherbytes);
 
-let distance_key = []; // to store results
 // Guess keysize statistically
-for (let keysize = 2; keysize <= 40; keysize++) {
-  //console.log("Looking at keysize=" + keysize)
-  // Take the first 4 keysize-sized bytes,
-  // compute Hamming distances between each pair (six in all)
-  // Average and record result. Then pick the smallest.
-  const num_blocks = 4;
-  const num_pairs = num_blocks * (num_blocks - 1) / 2;
-  let avg_dist = 0;
-  for (let i = 0; i < num_blocks - 1; i++) {
-    for (let j = i + 1; j < num_blocks; j++) {
-      // compute dist between i-th and j-th block of size keysize
-      // and add 1/keysize-th part of it to avg_dist
-      let block1 = cypherbytes.slice(i * keysize, (i+1) * keysize);
-      let block2 = cypherbytes.slice(j * keysize, (j+1) * keysize);
-      //console.log(`New pair: ${i * keysize}--${(i+1) * keysize} and ${j * keysize}--${(j+1) * keysize}. Diff=${ct.hamming_dist_buffers(block1, block2)}`);
-      avg_dist += ct.hamming_dist_buffers(block1, block2) / num_pairs;
-    }
-  }
-  //console.log(`Avg. dist for keysize=${keysize} is ${avg_dist} (abs) and ${avg_dist / keysize} (normalized)`)
-  avg_dist /= keysize; // Normalize wrt. keysize
-  //console.log(`keysize=${keysize} : ${avg_dist}`)
-  distance_key.push([avg_dist, keysize]);
-}
+const distance_keysize = ct.score_keysizes(cypherbytes);
 
-// Best keysize candidates
-let best_keysizes = distance_key.sort().slice(0,3).map(x => x[1]);
+// Find best keysize candidates
+//  = the ones with smallest Hamming distance
+const best_keysizes = distance_keysize.sort().slice(0,3).map(x => x[1]);
 console.log("Best keysizes are " + best_keysizes);
 
-// Now that you probably know the KEYSIZE: break the ciphertext into blocks of KEYSIZE length.
-// Try this for each candidate keysize
-console.log(cypherbytes);
+// For each candidate keysize, try to crack the code
 for (let keysize of best_keysizes) {
-  let blocks = []; // array of keysize-sized buffers (except, possibly, the last)
-  console.log("Trying good keysize " + keysize);
-  for (let i = 0; i < cypherbytes.length; i += keysize) { // i = start of new block
-    let new_block = cypherbytes.slice(i, i + keysize);
-    blocks.push(new_block);
-    //console.log(`i=${i}`)
-    //console.log("New block:");
-    //console.log(new_block);
-  }
-  // Now transpose the blocks: make a block that is the first byte of every
-  // block, and a block that is the second byte of every block, and so on.
-  //blocks = [[1,2,3], [4,5,6]]; // debug
-  let transposed = [];
-  for (let i = 0; i < keysize; i++) { // for each column index
-    transposed.push(blocks.map(x => x[i])); // push column as row
-  }
+  console.log("Trying keysize " + keysize);
 
-  // Solve each block as if it was single-character XOR. You already have code to do this.
+  // Break the ciphertext into blocks of KEYSIZE length
+  const blocks = ct.array_to_blocks(cypherbytes, keysize);
+
+  // Transpose the blocks
+  let transposed = ct.transpose_blocks(blocks);
+
+  // Solve each block as if it was single-character XOR.
   //console.log("For each of the transposed blocks:")
-  let key = [];
+  let key = []; // Array of single-byte keys
   for (let block of transposed) {
-    let guess = ct.guess_single_byte(Buffer.from(block));
-    //console.log("  Cypher byte: " + guess[2].toString(2));
-    //console.log("    Cleartext: " + guess[0]);
+    const guess = ct.guess_single_byte(Buffer.from(block));
     key.push(guess[2]);
   }
-  let key_str = Buffer.from(key).toString('utf8');
-  console.log(`KEY = ${key_str}`);
-  let cleartext = ct.bxor(Buffer.from(key), cypherbytes, true).toString();
-  console.log(`Cleartext: ${cleartext}`);
+
+  const key_str = Buffer.from(key).toString('utf8');
+  console.log(`FOUND KEY:\n  ${key_str}\n`);
+  const cleartext = ct.bxor(Buffer.from(key), cypherbytes, true).toString();
+  console.log(`CLEARTEXT:\n${cleartext}`);
   break; // Don't try other sizes, the first one is good
 }

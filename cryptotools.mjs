@@ -1,5 +1,5 @@
 // Letter and space frequency in English
-export let eng_freq = normalize_map(new Map([
+export let eng_freq = normalize_map(add_caps_to_map(new Map([
   ["a", 0.0834], ["b", 0.0154], ["c", 0.0273], ["d", 0.0414],
   ["e", 0.1260], ["f", 0.0203], ["g", 0.0192],
   ["h", 0.0611], ["i", 0.0671], ["j", 0.0023], ["k", 0.0087],
@@ -7,19 +7,10 @@ export let eng_freq = normalize_map(new Map([
   ["q", 0.0009], ["r", 0.0568], ["s", 0.0611],
   ["t", 0.0937], ["u", 0.0285], ["v", 0.0106],
   ["w", 0.0234], ["x", 0.0020], ["y", 0.0204], ["z", 0.0006],
-  // THe following is hand-made based on assumption that capital letters
-  // occur 1/10 as frequently
-  ["A", 0.00834], ["B", 0.00154], ["C", 0.00273], ["D", 0.00414],
-  ["E", 0.01260], ["F", 0.00203], ["G", 0.00192],
-  ["H", 0.00611], ["I", 0.00671], ["J", 0.00023], ["K", 0.00087],
-  ["L", 0.00424], ["M", 0.00253], ["N", 0.00680], ["O", 0.00770], ["P", 0.00166],
-  ["Q", 0.00009], ["R", 0.00568], ["S", 0.00611],
-  ["T", 0.00937], ["U", 0.00285], ["V", 0.00106],
-  ["W", 0.00234], ["X", 0.00020], ["Y", 0.00204], ["Z", 0.00006],
   [" ", 1/5.7] // avg. word length 4.7, so 5.7 with space, so 1/5.7 is space freq.
-]));
+])));
 
-function normalize_map (map) {  
+function normalize_map (map) {
   const total = sum_map_vals(map);
   let map2 = new Map();
   for (let [k, v] of map)
@@ -27,10 +18,15 @@ function normalize_map (map) {
   return map2;
 }
 
-// Pretty printing for maps
-function print_map (map) {
-  for (let [k, v] of map)
-    console.log(`${k} => ${v}`);
+function add_caps_to_map(map) {
+  let map2 = new Map();
+  for (let [k, v] of map) {
+    map2.set(k, v);
+    const k_upper = k.toUpperCase();
+    if (!map.has(k_upper))
+      map2.set(k_upper, v / 30); // Assume uppercase is 30 times more rare
+  }
+  return map2;
 }
 
 // Transcode a hex string to base64
@@ -132,7 +128,6 @@ export function guess_single_byte(b) {
       best = [cleartext, error, byte];
       least_error = error;
     }
-
     byte += 1;
   }
   return best;
@@ -158,4 +153,47 @@ export function hamming_dist_buffers(b1, b2) {
 
 function count_ones(string) {
   return (string.match(/1/g) || []).length;
+}
+
+export function score_keysizes(cypherbytes, from=2, to=40) {
+  console.log(`Guessing keysize in range [${from}, ${to}]`);
+  let distance_keysize = [];
+  for (let keysize = from; keysize <= to; keysize++) {
+    // Take the first 4 keysize-sized bytes,
+    // compute Hamming distances between each pair (six in all)
+    // Average and record result. Then pick the smallest.
+    const num_blocks = 4;
+    const num_pairs = num_blocks * (num_blocks - 1) / 2;
+    let avg_dist = 0;
+    for (let i = 0; i < num_blocks - 1; i++) {
+      for (let j = i + 1; j < num_blocks; j++) {
+        // compute dist between i-th and j-th block of size keysize
+        // and add 1/num_pairs-th part of it to avg_dist
+        const block1 = cypherbytes.slice(i * keysize, (i+1) * keysize);
+        const block2 = cypherbytes.slice(j * keysize, (j+1) * keysize);
+
+        avg_dist += hamming_dist_buffers(block1, block2) / num_pairs;
+      }
+    }
+    avg_dist /= keysize; // Normalize wrt. keysize
+    distance_keysize.push([avg_dist, keysize]);
+  }
+  return distance_keysize;
+}
+
+// Break a buffer (array) of bytes into an array of blocksized arrays
+export function array_to_blocks(cypherbytes, blocksize) {
+  let blocks = [];
+  for (let i = 0; i < cypherbytes.length; i += blocksize)
+    blocks.push(cypherbytes.slice(i, i + blocksize));
+  return blocks;
+}
+
+// Input: a proper matrix (array of arrays)
+// Output: same, transposed
+export function transpose_blocks(blocks) {
+  let transposed = [];
+  for (let i = 0; i < blocks[0].length; i++) // for each column index
+    transposed.push(blocks.map(x => x[i])); // push column as row
+  return transposed;
 }
