@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+
 // Letter and space frequency in English
 export let eng_freq = normalize_map(add_caps_to_map(new Map([
   ["a", 0.0834], ["b", 0.0154], ["c", 0.0273], ["d", 0.0414],
@@ -196,4 +198,10 @@ export function transpose_blocks(blocks) {
   for (let i = 0; i < blocks[0].length; i++) // for each column index
     transposed.push(blocks.map(x => x[i])); // push column as row
   return transposed;
+}
+
+export function read_bytes_from_base64_file(filename) {
+  const base64lines = readFileSync(filename, 'utf8');
+  const base64cont = base64lines.split('\n').join('');
+  return Buffer.from(base64cont, 'base64');
 }

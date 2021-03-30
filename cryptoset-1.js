@@ -106,11 +106,7 @@ console.log("Challenge 6: Break repeating-key XOR");
 // Decrypt it.
 
 // Load and decode the file
-const base64lines = readFileSync('6.txt', 'utf8');
-const base64cont = base64lines.split('\n').join('');
-const cypherbytes = Buffer.from(base64cont, 'base64');
-console.log(`(Read and decoded into ${cypherbytes.length} bytes)`);
-//console.log(cypherbytes);
+const cypherbytes = ct.read_bytes_from_base64_file('6.txt');
 
 // Guess keysize statistically
 const distance_keysize = ct.score_keysizes(cypherbytes);
@@ -144,3 +140,18 @@ for (let keysize of best_keysizes) {
   console.log(`CLEARTEXT:\n${cleartext}`);
   break; // Don't try other sizes, the first one is good
 }
+
+
+////////////////////////////////////////////////
+console.log("Challenge 7: AES in ECB mode");
+const key7 = "YELLOW SUBMARINE";
+const cypherbytes7 =  ct.read_bytes_from_base64_file('7.txt');
+console.log(`(Read and decoded into ${cypherbytes7.length} bytes)`);
+
+// To find exact name of algorithm argument, see
+//  $ openssl list -cipher-algorithms
+
+import { createDecipheriv } from 'crypto';
+const decipher = createDecipheriv('AES-128-ECB', key7, null);
+const cleartext7 = decipher.update(cypherbytes7, null, 'utf8') + decipher.final('utf8');
+console.log(cleartext7); // Same song again!
