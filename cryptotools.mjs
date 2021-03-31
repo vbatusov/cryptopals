@@ -205,3 +205,14 @@ export function read_bytes_from_base64_file(filename) {
   const base64cont = base64lines.split('\n').join('');
   return Buffer.from(base64cont, 'base64');
 }
+
+export function pad_block(buffer, size) {
+  if (buffer.length > size) {
+    console.log(buffer.length + ", " + size);
+    throw "Block larger than blocksize!";
+  }
+  const num = size - buffer.length;
+  const ans = Buffer.concat([buffer, Buffer.alloc(num, num)]);
+  //console.log(ans);
+  return ans;
+}

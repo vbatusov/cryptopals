@@ -196,3 +196,4 @@ for (let buf of buffers){
 }
 console.log("Suspects:");
 console.log(suspects.map(x => `Line ${x[0]} has ${x[1]} repetitions.`));
+// Answer: line 133 in 8.txt
