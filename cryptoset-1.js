@@ -151,9 +151,9 @@ console.log(`(Read and decoded into ${cypherbytes7.length} bytes)`);
 // To find exact name of algorithm argument, see
 //  $ openssl list -cipher-algorithms
 
-import { createDecipheriv } from 'crypto';
-const decipher = createDecipheriv('AES-128-ECB', key7, null);
-const cleartext7 = decipher.update(cypherbytes7, null, 'utf8') + decipher.final('utf8');
+//import { createDecipheriv } from 'crypto';
+//const decipher = createDecipheriv('AES-128-ECB', key7, null);
+const cleartext7 = ct.decrypt_AES128ECB(cypherbytes7, key7).toString('utf8');
 console.log(cleartext7); // Same song again!
 
 ////////////////////////////////////////////////

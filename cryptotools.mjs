@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs';
+import { createCipheriv, createDecipheriv } from 'crypto';
 
 // Letter and space frequency in English
 export let eng_freq = normalize_map(add_caps_to_map(new Map([
@@ -200,19 +201,79 @@ export function transpose_blocks(blocks) {
   return transposed;
 }
 
-export function read_bytes_from_base64_file(filename) {
-  const base64lines = readFileSync(filename, 'utf8');
-  const base64cont = base64lines.split('\n').join('');
-  return Buffer.from(base64cont, 'base64');
+
+export function read_bytes_from_file(filename, encoding) {
+  const lines = readFileSync(filename, 'utf8');
+  const continuous = lines.split('\n').join('');
+  return Buffer.from(continuous, encoding);
 }
 
-export function pad_block(buffer, size) {
-  if (buffer.length > size) {
-    console.log(buffer.length + ", " + size);
-    throw "Block larger than blocksize!";
+export function read_bytes_from_base64_file(filename) {
+  return read_bytes_from_file(filename, 'base64');
+}
+
+// Updated: now pads an arbitrary-length buffer to a multiple of block size
+export function pad_block(buffer, size=16) {
+  const delta = size - (buffer.length % size);
+  return Buffer.concat([buffer, Buffer.alloc(delta, delta)]);
+}
+
+// Simple AES-128 with ECB back-and-forth
+// Cleartext and cyphertext are in byte buffers
+// Key is a string
+// Works on single and multiple blocks, padded or not
+// If not padded to size, message will not decrypt!
+export function encrypt_AES128ECB(bytes, key_string) {
+  const cipher = createCipheriv('AES-128-ECB', key_string, null);
+  cipher.setAutoPadding(false); // VERY IMPORTANT, othewise weird stuff happens
+  return Buffer.concat([cipher.update(bytes), cipher.final()]);
+}
+
+// Fails when bytes are not a multiple of BLOCKSIZE
+export function decrypt_AES128ECB(bytes, key_string) {
+  const decipher = createDecipheriv('AES-128-ECB', key_string, null);
+  decipher.setAutoPadding(false); // VERY IMPORTANT, othewise weird stuff happens
+  return Buffer.concat([decipher.update(bytes), decipher.final()]);
+}
+
+export const BLOCKSIZE = 16;
+// Encrypt using Cipher Block Chaining by hand
+// Takes any buffer, pads to size, then does CBC with blocksize=16B
+// Returns a buffer
+export function encrypt_CBC_manual(bytes, key_string, iv) {
+  const clear_padded = pad_block(bytes, BLOCKSIZE);
+  let new_blocks = [];
+  let prev_cypher = iv || Buffer.alloc(BLOCKSIZE);
+  for (let i = 0; i < clear_padded.length; i += BLOCKSIZE) {
+    const block = clear_padded.slice(i, i + BLOCKSIZE);
+    let new_cypher = encrypt_AES128ECB(bxor(block, prev_cypher), key_string);
+    new_blocks.push(new_cypher);
+    prev_cypher = new_cypher;
   }
-  const num = size - buffer.length;
-  const ans = Buffer.concat([buffer, Buffer.alloc(num, num)]);
-  //console.log(ans);
-  return ans;
+  return Buffer.concat(new_blocks);
+}
+
+// And decrypt...
+// Assume bytes are a multiple of blocksize
+export function decrypt_CBC_manual(bytes, key_string, iv) {
+  // For each block of cypherbytes, decrypt and xor with previous, write clearbytes
+  //console.log("Decryption main routine");
+  let clear_blocks = [];
+  let prev_cypher = iv || Buffer.alloc(BLOCKSIZE);
+  //console.log("IV = ");
+  //console.log(prev_cypher);
+  for (let i = 0; i < bytes.length; i += BLOCKSIZE) {
+    const cypherblock = bytes.slice(i, i + BLOCKSIZE);
+    //console.log("-> Looking at cypher block");
+    //console.log(cypherblock);
+    const xorblock = decrypt_AES128ECB(cypherblock, key_string);
+    //console.log("-> Becomes xor block");
+    //console.log(xorblock);
+    const clearblock = bxor(xorblock, prev_cypher);
+    //console.log("-> Becomes clear block");
+    //console.log(clearblock);
+    clear_blocks.push(clearblock);
+    prev_cypher = cypherblock;
+  }
+  return Buffer.concat(clear_blocks);
 }
